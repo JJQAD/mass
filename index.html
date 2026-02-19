@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Weight</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+  <main class="app">
+    <header class="top">
+      <!-- Visible date label (mm.dd.yy). Tap opens the native date scroller. -->
+      <button id="dateButton" class="dateButton" type="button" aria-label="Select date">
+        <span id="dateLabel" class="dateLabel">--.--.--</span>
+      </button>
+
+      <!-- Actual date input. Kept visually hidden but still triggers iOS picker. -->
+      <input id="dateInput" class="dateInput" type="date" />
+    </header>
+
+    <section class="entry">
+      <div class="weightRow">
+        <input
+          id="weightInput"
+          class="weightInput"
+          type="text"
+          inputmode="decimal"
+          autocomplete="off"
+          placeholder="0.0"
+          aria-label="Weight"
+        />
+        <button id="saveButton" class="saveButton" type="button" aria-label="Save weight"></button>
+      </div>
+
+      <div id="statusText" class="statusText" aria-live="polite"></div>
+    </section>
+
+    <section class="chartWrap">
+      <canvas id="chart" height="220"></canvas>
+    </section>
+
+    <section class="listWrap">
+      <div class="listHeader">Recent</div>
+      <ul id="recentList" class="recentList"></ul>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
