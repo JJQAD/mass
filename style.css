@@ -1,0 +1,162 @@
+:root{
+  --bg: #ffffff;
+  --fg: #111111;
+  --muted: #6b6b6b;
+  --line: #e6e6e6;
+
+  --btnIdle: #111111;
+  --btnSaved: #2a7a3b;   /* saved state */
+  --btnError: #b00020;   /* invalid input */
+}
+
+*{ box-sizing: border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", Helvetica, Arial;
+}
+
+.app{
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 18px 18px 28px;
+}
+
+.top{
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap: 12px;
+  margin-top: 6px;
+  margin-bottom: 18px;
+}
+
+.dateButton{
+  appearance:none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.dateLabel{
+  font-size: 20px;
+  letter-spacing: 0.02em;
+  color: var(--fg);
+}
+
+.dateInput{
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+}
+
+.entry{
+  margin-bottom: 16px;
+}
+
+.weightRow{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap: 14px;
+}
+
+.weightInput{
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font-size: 88px;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+}
+
+.weightInput::placeholder{
+  color: #d0d0d0;
+}
+
+.saveButton{
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: none;
+  background: var(--btnIdle);
+  cursor: pointer;
+  transform: translateY(-6px);
+}
+
+.saveButton.is-saved{
+  background: var(--btnSaved);
+}
+
+.saveButton.is-error{
+  background: var(--btnError);
+}
+
+.statusText{
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--muted);
+  min-height: 18px;
+}
+
+.chartWrap{
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  margin-top: 12px;
+}
+
+.listWrap{
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  margin-top: 16px;
+}
+
+.listHeader{
+  font-size: 14px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  margin-bottom: 10px;
+}
+
+.recentList{
+  list-style:none;
+  padding:0;
+  margin:0;
+  display:flex;
+  flex-direction:column;
+  gap: 10px;
+}
+
+.recentList li{
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  padding: 0;
+  margin: 0;
+}
+
+.recentDate{
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.recentWeight{
+  font-size: 18px;
+  color: var(--fg);
+  letter-spacing: 0.01em;
+}
+
+/* iPhone portrait preference: design for portrait without forcing it */
+@media (min-width: 600px){
+  .app{ padding-top: 28px; }
+  .weightInput{ font-size: 96px; }
+}
