@@ -1,35 +1,29 @@
 "use strict";
 
 /**
- * Phase 1 storage strategy:
- * - LocalStorage for persistence (single user device).
- * - Later replace storage functions with Supabase calls.
- *
- * Updates in this version:
- * - Selected date concept (selectedISO) separate from created_at
- * - Date displayed as mm.dd.yy, centered below weight
- * - Tap date opens iOS native date scroller
- * - Swipe right = previous day, swipe left = next day (future blocked)
- * - Weight number centered, larger, bold; today’s weight styled via .is-today class
+ * Phase 1:
+ * - LocalStorage persistence
+ * - Swipe horizontally to change selected date
+ * - One entry per day; overwrite on save
+ * - No date picker UI
+ * - Save via small checkmark button (and Enter key)
+ * - Auto-fill input with saved weight for selected date
  */
 
 const STORAGE_KEY = "weight_app_entries_v1";
 
 const els = {
-  dateButton: document.getElementById("dateButton"),
   dateLabel: document.getElementById("dateLabel"),
-  dateInput: document.getElementById("dateInput"),
   weightInput: document.getElementById("weightInput"),
-  saveButton: document.getElementById("saveButton"),
+  checkButton: document.getElementById("checkButton"),
   statusText: document.getElementById("statusText"),
-  recentList: document.getElementById("recentList"),
   chartCanvas: document.getElementById("chart"),
   swipeStage: document.getElementById("swipeStage"),
   swipeTrack: document.getElementById("swipeTrack"),
 };
 
 let chart = null;
-let entries = []; // { entryDate: "YYYY-MM-DD", weight: number, createdAt: number }
+let entries = [];      // { entryDate: "YYYY-MM-DD", weight: number, createdAt: number }
 let selectedISO = null;
 
 /* ---------- Date helpers ---------- */
@@ -97,39 +91,46 @@ function sortByEntryDateAsc(list) {
   return [...list].sort((a, b) => a.entryDate.localeCompare(b.entryDate));
 }
 
+function findEntryByDate(iso) {
+  return entries.find((e) => e.entryDate === iso) || null;
+}
+
 function upsertEntry(entryDate, weight) {
-  // One entry per day: overwrite if same entryDate exists
   const next = entries.filter((e) => e.entryDate !== entryDate);
   next.push({ entryDate, weight, createdAt: Date.now() });
   entries = sortByEntryDateAsc(next);
   saveEntries(entries);
 }
 
+/* ---------- Input parsing ---------- */
+
 function parseWeightInput(raw) {
   const normalized = raw.trim().replace(",", ".");
   if (!normalized) return null;
+
   const n = Number(normalized);
   if (!Number.isFinite(n)) return null;
   if (n <= 0 || n > 1400) return null;
+
   return Math.round(n * 10) / 10;
 }
 
-/* ---------- UI updates ---------- */
+/* ---------- UI state ---------- */
 
 function setStatus(text) {
   els.statusText.textContent = text;
 }
 
-function setSaveButtonState(state) {
-  // state: "idle" | "saved" | "error"
-  els.saveButton.classList.remove("is-saved", "is-error");
-  if (state === "saved") els.saveButton.classList.add("is-saved");
-  if (state === "error") els.saveButton.classList.add("is-error");
+function setCheckState(state) {
+  // state: "idle" | "active" | "saved" | "error"
+  els.checkButton.classList.remove("is-active", "is-saved", "is-error");
+  if (state === "active") els.checkButton.classList.add("is-active");
+  if (state === "saved") els.checkButton.classList.add("is-saved");
+  if (state === "error") els.checkButton.classList.add("is-error");
 }
 
 function renderDateLabel() {
   els.dateLabel.textContent = isoToMMDDYY(selectedISO);
-  els.dateInput.value = selectedISO; // keep picker synced
 }
 
 function updateTodayColor() {
@@ -137,25 +138,13 @@ function updateTodayColor() {
   els.weightInput.classList.toggle("is-today", selectedISO === today);
 }
 
-function renderRecentList() {
-  const list = [...entries].slice(-7).reverse();
-  els.recentList.innerHTML = "";
-
-  for (const e of list) {
-    const li = document.createElement("li");
-
-    const date = document.createElement("span");
-    date.className = "recentDate";
-    date.textContent = isoToMMDDYY(e.entryDate);
-
-    const w = document.createElement("span");
-    w.className = "recentWeight";
-    w.textContent = `${e.weight}`;
-
-    li.appendChild(date);
-    li.appendChild(w);
-    els.recentList.appendChild(li);
+function fillWeightForSelectedDate() {
+  const e = findEntryByDate(selectedISO);
+  if (!e) {
+    els.weightInput.value = "";
+    return;
   }
+  els.weightInput.value = String(e.weight);
 }
 
 function renderChart() {
@@ -184,14 +173,8 @@ function renderChart() {
           tooltip: { enabled: true },
         },
         scales: {
-          x: {
-            grid: { display: false },
-            ticks: { maxTicksLimit: 6 },
-          },
-          y: {
-            grid: { display: false },
-            ticks: { maxTicksLimit: 5 },
-          },
+          x: { grid: { display: false }, ticks: { maxTicksLimit: 6 } },
+          y: { grid: { display: false }, ticks: { maxTicksLimit: 5 } },
         },
       },
     });
@@ -207,28 +190,9 @@ function renderAll() {
   renderDateLabel();
   updateTodayColor();
   renderChart();
-  renderRecentList();
 }
 
-/* ---------- Date picker ---------- */
-
-function openNativeDatePicker() {
-  // iOS: focusing/clicking a date input triggers the vertical scroller
-  els.dateInput.showPicker?.();
-  els.dateInput.focus();
-  els.dateInput.click();
-}
-
-/* ---------- Navigation (swipe) ---------- */
-
-function shiftSelectedDay(deltaDays) {
-  const next = shiftISO(selectedISO, deltaDays);
-  if (isFutureISODate(next)) return; // block future
-  selectedISO = next;
-  renderAll();
-  setSaveButtonState("idle");
-  setStatus("");
-}
+/* ---------- Swipe navigation ---------- */
 
 function animateSwipe(dir, commitFn) {
   const cls = dir === "right" ? "slide-right" : "slide-left";
@@ -240,104 +204,104 @@ function animateSwipe(dir, commitFn) {
   }, 140);
 }
 
+function shiftSelectedDay(deltaDays) {
+  const next = shiftISO(selectedISO, deltaDays);
+  if (isFutureISODate(next)) return; // block future
+  selectedISO = next;
+  renderAll();
+  fillWeightForSelectedDate();
+  setCheckState("idle");
+  setStatus("");
+}
+
 function addSwipeNavigation() {
   let startX = 0;
   let startY = 0;
-  let active = false;
+  let tracking = false;
+  let locked = false;      // direction lock
+  let lockDir = null;      // "h" | "v"
 
-  const threshold = 40; // px
-  const restraint = 60; // px vertical tolerance
+  const threshold = 38;    // swipe commit threshold
+  const lockThreshold = 10;
 
-  els.swipeStage.addEventListener(
-    "touchstart",
-    (e) => {
-      if (!e.touches || e.touches.length !== 1) return;
-      active = true;
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-    },
-    { passive: true }
-  );
+  els.swipeStage.addEventListener("touchstart", (e) => {
+    if (!e.touches || e.touches.length !== 1) return;
+    tracking = true;
+    locked = false;
+    lockDir = null;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+  }, { passive: true });
 
-  els.swipeStage.addEventListener(
-    "touchmove",
-    (e) => {
-      if (!active || !e.touches || e.touches.length !== 1) return;
-      const dx = e.touches[0].clientX - startX;
-      const dy = e.touches[0].clientY - startY;
+  els.swipeStage.addEventListener("touchmove", (e) => {
+    if (!tracking || !e.touches || e.touches.length !== 1) return;
 
-      if (Math.abs(dy) > restraint) return;
+    const x = e.touches[0].clientX;
+    const y = e.touches[0].clientY;
+    const dx = x - startX;
+    const dy = y - startY;
 
-      els.swipeTrack.classList.remove("slide-left", "slide-right");
-      if (dx > 18) els.swipeTrack.classList.add("slide-right");
-      if (dx < -18) els.swipeTrack.classList.add("slide-left");
-    },
-    { passive: true }
-  );
+    if (!locked) {
+      if (Math.abs(dx) < lockThreshold && Math.abs(dy) < lockThreshold) return;
+      locked = true;
+      lockDir = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
+    }
 
-  els.swipeStage.addEventListener(
-    "touchend",
-    (e) => {
-      if (!active) return;
-      active = false;
+    if (lockDir === "h") {
+      // We are handling horizontal swipe; prevent page scroll
+      e.preventDefault();
 
       els.swipeTrack.classList.remove("slide-left", "slide-right");
+      if (dx > 12) els.swipeTrack.classList.add("slide-right");
+      if (dx < -12) els.swipeTrack.classList.add("slide-left");
+    }
+  }, { passive: false });
 
-      const touch = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0] : null;
-      const endX = touch ? touch.clientX : startX;
-      const endY = touch ? touch.clientY : startY;
+  els.swipeStage.addEventListener("touchend", (e) => {
+    if (!tracking) return;
+    tracking = false;
 
-      const dx = endX - startX;
-      const dy = endY - startY;
+    els.swipeTrack.classList.remove("slide-left", "slide-right");
+    if (lockDir !== "h") return;
 
-      if (Math.abs(dy) > restraint) return;
-      if (Math.abs(dx) < threshold) return;
+    const touch = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0] : null;
+    if (!touch) return;
 
-      // Your rule:
-      // swipe right -> previous day slides in
-      // swipe left  -> next day (future blocked)
-      if (dx > 0) {
-        animateSwipe("right", () => shiftSelectedDay(-1));
-      } else {
-        animateSwipe("left", () => shiftSelectedDay(+1));
-      }
-    },
-    { passive: true }
-  );
+    const dx = touch.clientX - startX;
+
+    if (Math.abs(dx) < threshold) return;
+
+    // Rule:
+    // swipe right -> previous day
+    // swipe left  -> next day (future blocked)
+    if (dx > 0) {
+      animateSwipe("right", () => shiftSelectedDay(-1));
+    } else {
+      animateSwipe("left", () => shiftSelectedDay(+1));
+    }
+  }, { passive: true });
 }
 
 /* ---------- Save ---------- */
 
-function onSave() {
-  setSaveButtonState("idle");
+function saveCurrent() {
+  setCheckState("idle");
   setStatus("");
-
-  const iso = selectedISO;
-  if (!iso) {
-    setSaveButtonState("error");
-    setStatus("Missing date.");
-    return;
-  }
-  if (isFutureISODate(iso)) {
-    setSaveButtonState("error");
-    setStatus("Future dates blocked.");
-    return;
-  }
 
   const weight = parseWeightInput(els.weightInput.value);
   if (weight === null) {
-    setSaveButtonState("error");
+    setCheckState("error");
     setStatus("Invalid weight.");
+    window.setTimeout(() => setCheckState("idle"), 700);
     return;
   }
 
-  upsertEntry(iso, weight);
+  upsertEntry(selectedISO, weight);
   renderAll();
 
-  setSaveButtonState("saved");
-  setStatus(`Saved ${weight} for ${isoToMMDDYY(iso)}.`);
-
-  window.setTimeout(() => setSaveButtonState("idle"), 900);
+  setCheckState("saved");
+  setStatus(`Saved ${weight} for ${isoToMMDDYY(selectedISO)}.`);
+  window.setTimeout(() => setCheckState("idle"), 900);
 }
 
 /* ---------- Init ---------- */
@@ -347,9 +311,8 @@ function init() {
 
   const today = todayISODate();
   selectedISO = today;
-  els.dateInput.value = today;
 
-  // Seed minimal demo data if empty (remove later if desired)
+  // Optional seed data if empty (delete if you want a blank start)
   if (entries.length === 0) {
     const seed = [
       { entryDate: shiftISO(today, -14), weight: 184.6, createdAt: Date.now() },
@@ -362,41 +325,25 @@ function init() {
   }
 
   renderAll();
-  setSaveButtonState("idle");
+  fillWeightForSelectedDate();
+  setCheckState("idle");
 
-  // Date picker
-  els.dateButton.addEventListener("click", openNativeDatePicker);
-  els.dateInput.addEventListener("change", () => {
-    const next = els.dateInput.value;
-    if (!next || isFutureISODate(next)) {
-      els.dateInput.value = selectedISO;
-      renderDateLabel();
-      setSaveButtonState("error");
-      setStatus("Future dates blocked.");
-      window.setTimeout(() => setSaveButtonState("idle"), 900);
-      return;
-    }
-    selectedISO = next;
-    renderAll();
-    setSaveButtonState("idle");
-    setStatus("");
-  });
-
-  // Save
-  els.saveButton.addEventListener("click", onSave);
+  // Checkmark save
+  els.checkButton.addEventListener("click", saveCurrent);
 
   // Enter saves
   els.weightInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") onSave();
+    if (e.key === "Enter") saveCurrent();
   });
 
-  // Any edits reset state
+  // Input changes: activate check if valid
   els.weightInput.addEventListener("input", () => {
-    setSaveButtonState("idle");
+    const ok = parseWeightInput(els.weightInput.value) !== null;
+    setCheckState(ok ? "active" : "idle");
     setStatus("");
   });
 
-  // Swipe navigation
+  // Swipe
   addSwipeNavigation();
 }
 
