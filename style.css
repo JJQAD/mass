@@ -84,10 +84,10 @@ body{
   background: transparent;
   padding: 0;
   margin: 0;
-  font-size: 132px;     /* 88px * 1.5 */
+  font-size: 132px;
   line-height: 0.92;
   letter-spacing: -0.03em;
-  font-weight: 800;
+  font-weight: 400;          /* was bold; now regular */
   color: var(--fg);
 }
 
@@ -97,24 +97,6 @@ body{
 
 .weightInput::placeholder{
   color: #d0d0d0;
-}
-
-.saveButton{
-  width: 42px;
-  height: 42px;
-  border-radius: 999px;
-  border: none;
-  background: var(--btnIdle);
-  cursor: pointer;
-  margin-top: 10px;
-}
-
-.saveButton.is-saved{
-  background: var(--btnSaved);
-}
-
-.saveButton.is-error{
-  background: var(--btnError);
 }
 
 .statusText{
