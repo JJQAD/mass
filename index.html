@@ -16,23 +16,20 @@
   <div class="swipeStage" id="swipeStage">
     <div class="swipeTrack" id="swipeTrack">
       <div class="weightRow">
-        <input
-          id="weightInput"
-          class="weightInput"
-          type="text"
-          inputmode="decimal"
-          autocomplete="off"
-          placeholder="0.0"
-          aria-label="Weight"
-        />
+        <div class="weightShell">
+          <input
+            id="weightInput"
+            class="weightInput"
+            type="text"
+            inputmode="decimal"
+            autocomplete="off"
+            placeholder="0.0"
+            aria-label="Weight"
+          />
+          <button id="checkButton" class="checkButton" type="button" aria-label="Save weight">✓</button>
+        </div>
 
-        <button id="dateButton" class="dateButton" type="button" aria-label="Select date">
-          <span id="dateLabel" class="dateLabel">--.--.--</span>
-        </button>
-
-        <input id="dateInput" class="dateInput" type="date" />
-
-        <button id="saveButton" class="saveButton" type="button" aria-label="Save weight"></button>
+        <div id="dateLabel" class="dateLabel">--.--.--</div>
       </div>
     </div>
   </div>
@@ -43,12 +40,6 @@
     <section class="chartWrap">
       <canvas id="chart" height="220"></canvas>
     </section>
-
-    <section class="listWrap">
-      <div class="listHeader">Recent</div>
-      <ul id="recentList" class="recentList"></ul>
-    </section>
-  </main>
 
   <script src="app.js"></script>
 </body>
