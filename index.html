@@ -10,17 +10,11 @@
 
 <body>
   <main class="app">
-    <header class="top">
-      <!-- Visible date label (mm.dd.yy). Tap opens the native date scroller. -->
-      <button id="dateButton" class="dateButton" type="button" aria-label="Select date">
-        <span id="dateLabel" class="dateLabel">--.--.--</span>
-      </button>
+  
 
-      <!-- Actual date input. Kept visually hidden but still triggers iOS picker. -->
-      <input id="dateInput" class="dateInput" type="date" />
-    </header>
-
-    <section class="entry">
+<section class="entry">
+  <div class="swipeStage" id="swipeStage">
+    <div class="swipeTrack" id="swipeTrack">
       <div class="weightRow">
         <input
           id="weightInput"
@@ -31,11 +25,20 @@
           placeholder="0.0"
           aria-label="Weight"
         />
+
+        <button id="dateButton" class="dateButton" type="button" aria-label="Select date">
+          <span id="dateLabel" class="dateLabel">--.--.--</span>
+        </button>
+
+        <input id="dateInput" class="dateInput" type="date" />
+
         <button id="saveButton" class="saveButton" type="button" aria-label="Save weight"></button>
       </div>
+    </div>
+  </div>
 
-      <div id="statusText" class="statusText" aria-live="polite"></div>
-    </section>
+  <div id="statusText" class="statusText" aria-live="polite"></div>
+</section>
 
     <section class="chartWrap">
       <canvas id="chart" height="220"></canvas>
