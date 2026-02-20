@@ -3,43 +3,40 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Weight</title>
+  <title>Mass</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 
 <body>
   <main class="app">
-  
+    <div class="title">MASS</div>
 
-<section class="entry">
-  <div class="swipeStage" id="swipeStage">
-    <div class="swipeTrack" id="swipeTrack">
-      <div class="weightRow">
-        <div class="weightShell">
-          <input
-            id="weightInput"
-            class="weightInput"
-            type="text"
-            inputmode="decimal"
-            autocomplete="off"
-            placeholder="0.0"
-            aria-label="Weight"
-          />
-          <button id="checkButton" class="checkButton" type="button" aria-label="Save weight">✓</button>
+    <section class="entry">
+      <div class="swipeStage" id="swipeStage">
+        <div class="swipeTrack" id="swipeTrack">
+          <div class="weightRow">
+            <input
+              id="weightInput"
+              class="weightInput"
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
+              placeholder="0.0"
+              aria-label="Weight"
+            />
+            <div id="dateLabel" class="dateLabel">--.--.--</div>
+          </div>
         </div>
-
-        <div id="dateLabel" class="dateLabel">--.--.--</div>
       </div>
-    </div>
-  </div>
 
-  <div id="statusText" class="statusText" aria-live="polite"></div>
-</section>
+      <div id="statusText" class="statusText" aria-live="polite"></div>
+    </section>
 
     <section class="chartWrap">
       <canvas id="chart" height="220"></canvas>
     </section>
+  </main>
 
   <script src="app.js"></script>
 </body>
