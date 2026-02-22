@@ -1,17 +1,15 @@
 "use strict";
 
-/*
-Mass — Phase 1
-
-• LocalStorage persistence
-• Swipe horizontally to change day (Medium-style)
-• One entry per day (overwrite)
-• Auto-save on blur / Enter / swipe away
-• 7-day filled area graph
-• Axis scaled so line sits in upper third
-*/
-
 const STORAGE_KEY = "mass_entries_v1";
+const RANGES = ["7d", "1m", "6m", "1y"];
+const DEFAULT_RANGE = "7d";
+
+const RANGE_CONFIG = {
+  "7d": { days: 7, label: "week", tickEvery: 1 },
+  "1m": { days: 30, label: "month", tickEvery: 5 },
+  "6m": { days: 182, label: "6 months", tickEvery: 28 },
+  "1y": { days: 365, label: "year", tickEvery: 56 },
+};
 
 const els = {
   dateLabel: document.getElementById("dateLabel"),
@@ -20,21 +18,20 @@ const els = {
   chartCanvas: document.getElementById("chart"),
   swipeStage: document.getElementById("swipeStage"),
   swipeTrack: document.getElementById("swipeTrack"),
+  rangeLabel: document.getElementById("rangeLabel"),
+  rangeSwipeStage: document.getElementById("rangeSwipeStage"),
+  rangeSwipeTrack: document.getElementById("rangeSwipeTrack"),
 };
 
 let chart = null;
-let entries = [];       // { entryDate: "YYYY-MM-DD", weight: number, createdAt: number }
+let entries = [];
 let selectedISO = null;
-
-/* ---------------- DATE HELPERS ---------------- */
+let selectedRange = DEFAULT_RANGE;
+let showGrid = true;
 
 function todayISODate() {
   const d = new Date();
-  // Safer local date vs toISOString() timezone drift
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function isoToMMDDYY(iso) {
@@ -46,10 +43,7 @@ function shiftISO(iso, deltaDays) {
   const [y, m, d] = iso.split("-").map(Number);
   const dt = new Date(y, m - 1, d);
   dt.setDate(dt.getDate() + deltaDays);
-  const yyyy = dt.getFullYear();
-  const mm = String(dt.getMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 }
 
 function isFutureISODate(iso) {
@@ -60,8 +54,6 @@ function isFutureISODate(iso) {
   return selected.getTime() > today.getTime();
 }
 
-/* ---------------- STORAGE ---------------- */
-
 function loadEntries() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return [];
@@ -69,8 +61,8 @@ function loadEntries() {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .filter(e => e && typeof e.entryDate === "string" && typeof e.weight === "number")
-      .map(e => ({
+      .filter((e) => e && typeof e.entryDate === "string" && typeof e.weight === "number")
+      .map((e) => ({
         entryDate: e.entryDate,
         weight: e.weight,
         createdAt: typeof e.createdAt === "number" ? e.createdAt : Date.now(),
@@ -89,17 +81,15 @@ function sortEntries() {
 }
 
 function findEntry(iso) {
-  return entries.find(e => e.entryDate === iso) || null;
+  return entries.find((e) => e.entryDate === iso) || null;
 }
 
 function upsertEntry(iso, weight) {
-  entries = entries.filter(e => e.entryDate !== iso);
+  entries = entries.filter((e) => e.entryDate !== iso);
   entries.push({ entryDate: iso, weight, createdAt: Date.now() });
   sortEntries();
   saveEntries();
 }
-
-/* ---------------- INPUT ---------------- */
 
 function parseWeight(raw) {
   const normalized = raw.trim().replace(",", ".");
@@ -114,20 +104,24 @@ function setStatus(text) {
 }
 
 function autoSaveIfValid({ quiet = true } = {}) {
-  const weight = parseWeight(els.weightInput.value);
+  const value = els.weightInput.value.trim();
+  if (!value) {
+    if (!quiet) setStatus("");
+    return false;
+  }
+
+  const weight = parseWeight(value);
   if (weight === null) {
-    if (!quiet && els.weightInput.value.trim() !== "") setStatus("Invalid weight.");
+    if (!quiet) setStatus("Invalid weight.");
     return false;
   }
 
   upsertEntry(selectedISO, weight);
   renderChart();
 
-  if (!quiet) setStatus(`Saved ${weight} for ${isoToMMDDYY(selectedISO)}.`);
+  if (!quiet) setStatus("");
   return true;
 }
-
-/* ---------------- UI ---------------- */
 
 function renderDate() {
   els.dateLabel.textContent = isoToMMDDYY(selectedISO);
@@ -142,25 +136,30 @@ function fillWeightForSelectedDate() {
   els.weightInput.value = entry ? String(entry.weight) : "";
 }
 
-function renderAll() {
-  renderDate();
-  updateTodayColor();
-  fillWeightForSelectedDate();
-  renderChart();
+function renderRangeLabel() {
+  els.rangeLabel.textContent = RANGE_CONFIG[selectedRange].label;
 }
 
-/* ---------------- GRAPH (7 days, upper-third scaling) ---------------- */
+function stepRange(delta) {
+  const idx = RANGES.indexOf(selectedRange);
+  const nextIdx = Math.min(RANGES.length - 1, Math.max(0, idx + delta));
+  if (nextIdx === idx) return false;
+  selectedRange = RANGES[nextIdx];
+  renderRangeLabel();
+  renderChart();
+  return true;
+}
 
-function getWeekSeries(endISO) {
-  const days = [];
-  for (let i = 6; i >= 0; i--) days.push(shiftISO(endISO, -i));
+function getSeries(endISO, rangeKey) {
+  const { days, tickEvery } = RANGE_CONFIG[rangeKey] || RANGE_CONFIG[DEFAULT_RANGE];
+  const dayList = [];
+  for (let i = days - 1; i >= 0; i--) dayList.push(shiftISO(endISO, -i));
 
-  const map = new Map(entries.map(e => [e.entryDate, e.weight]));
+  const map = new Map(entries.map((e) => [e.entryDate, e.weight]));
 
   const values = [];
   let last = null;
-
-  for (const iso of days) {
+  for (const iso of dayList) {
     const v = map.has(iso) ? map.get(iso) : null;
     if (typeof v === "number") {
       last = v;
@@ -170,66 +169,85 @@ function getWeekSeries(endISO) {
     }
   }
 
-  const nums = values.filter(v => typeof v === "number");
-  const dataMin = nums.length ? Math.min(...nums) : 0;
-  const dataMax = nums.length ? Math.max(...nums) : 1;
+  const labels = dayList.map((iso, idx) => {
+    if (idx !== 0 && idx !== dayList.length - 1 && idx % tickEvery !== 0) return "";
+    const [, m, d] = iso.split("-");
+    return `${Number(m)}/${Number(d)}`;
+  });
 
-  const labels = days.map(d => d.split("-")[2].replace(/^0/, ""));
+  const numeric = values.filter((v) => typeof v === "number");
+  const dataMin = numeric.length ? Math.min(...numeric) : 170;
+  const dataMax = numeric.length ? Math.max(...numeric) : 171;
+
   return { labels, values, dataMin, dataMax };
 }
 
-function computeAxisUpperThird(dataMin, dataMax) {
+function computeAxis(dataMin, dataMax) {
   let range = dataMax - dataMin;
   if (range < 1) range = 1;
-
-  // Place series high: make axis span ~3x data range
-  const yMax = dataMax + range * 0.2;     // slight headroom
-  const yMin = yMax - range * 3.0;
-
-  // Pick a clean-ish step
-  const step = Math.max(1, Math.round(range / 2));
-
+  const yMax = Math.ceil(dataMax + range * 0.22);
+  const yMin = Math.floor(yMax - range * 3);
+  const step = 1;
   return { yMin, yMax, step };
 }
 
-function renderChart() {
-  const { labels, values, dataMin, dataMax } = getWeekSeries(selectedISO);
-  const { yMin, yMax, step } = computeAxisUpperThird(dataMin, dataMax);
+function computeGridLineWidth(value) {
+  if (!Number.isFinite(value)) return 0.5;
+  if (value % 10 === 0) return 1.4;
+  if (value % 5 === 0) return 1;
+  return 0.45;
+}
 
-  const accent =
-    getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#e23b1f";
+function renderChart() {
+  const series = getSeries(selectedISO, selectedRange);
+  const axis = computeAxis(series.dataMin, series.dataMax);
+  const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#e23b1f";
 
   const dataset = {
-    data: values,
+    data: series.values,
+    borderColor: accent,
     borderWidth: 0,
     pointRadius: 0,
     tension: 0.2,
     fill: true,
+    spanGaps: true,
     backgroundColor: accent,
   };
 
   if (!chart) {
     chart = new Chart(els.chartCanvas, {
       type: "line",
-      data: { labels, datasets: [dataset] },
+      data: { labels: series.labels, datasets: [dataset] },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: { enabled: false },
-        },
+        plugins: { legend: { display: false } },
         scales: {
           x: {
-            grid: { display: false },
+            grid: {
+              display: showGrid,
+              color: "rgba(255,255,255,0.92)",
+              lineWidth: 0.45,
+            },
+            border: { display: false },
             ticks: { color: "#6b6b6b", maxRotation: 0, autoSkip: false },
-            title: { display: true, text: "week", color: "#6b6b6b", padding: { top: 6 } },
           },
           y: {
-            grid: { display: false },
-            min: yMin,
-            max: yMax,
-            ticks: { color: "#6b6b6b", stepSize: step, maxTicksLimit: 4 },
+            grid: {
+              display: showGrid,
+              color: "rgba(255,255,255,0.92)",
+              lineWidth(context) {
+                return computeGridLineWidth(context.tick.value);
+              },
+            },
+            border: { display: false },
+            min: axis.yMin,
+            max: axis.yMax,
+            ticks: {
+              color: "#6b6b6b",
+              stepSize: axis.step,
+              maxTicksLimit: Math.min(14, Math.ceil(axis.yMax - axis.yMin) + 1),
+            },
           },
         },
       },
@@ -237,15 +255,24 @@ function renderChart() {
     return;
   }
 
-  chart.data.labels = labels;
+  chart.data.labels = series.labels;
   chart.data.datasets[0] = dataset;
-  chart.options.scales.y.min = yMin;
-  chart.options.scales.y.max = yMax;
-  chart.options.scales.y.ticks.stepSize = step;
+  chart.options.scales.x.grid.display = showGrid;
+  chart.options.scales.y.grid.display = showGrid;
+  chart.options.scales.y.min = axis.yMin;
+  chart.options.scales.y.max = axis.yMax;
+  chart.options.scales.y.ticks.stepSize = axis.step;
+  chart.options.scales.y.ticks.maxTicksLimit = Math.min(14, Math.ceil(axis.yMax - axis.yMin) + 1);
   chart.update();
 }
 
-/* ---------------- SWIPE (Medium-style + drag translate) ---------------- */
+function renderAll() {
+  renderDate();
+  updateTodayColor();
+  fillWeightForSelectedDate();
+  renderRangeLabel();
+  renderChart();
+}
 
 function shiftDay(delta) {
   const next = shiftISO(selectedISO, delta);
@@ -258,19 +285,17 @@ function addSwipe() {
   const touchsurface = els.swipeStage;
   const track = els.swipeTrack;
 
-  // Medium-style params
-  const threshold = 70;     // required min horizontal distance
-  const restraint = 90;     // max vertical drift allowed
-  const allowedTime = 450;  // max swipe time (ms)
+  const threshold = 70;
+  const restraint = 90;
+  const allowedTime = 450;
 
   let startX = 0;
   let startY = 0;
   let distX = 0;
   let distY = 0;
   let startTime = 0;
-
   let locked = false;
-  let lockDir = null; // "h" or "v"
+  let lockDir = null;
 
   function setTranslate(px) {
     track.style.transition = "none";
@@ -283,22 +308,17 @@ function addSwipe() {
   }
 
   function commitSwipe(dir) {
-    // dir: "left" -> next day, "right" -> previous day
     const width = touchsurface.clientWidth || 320;
     const off = dir === "left" ? -width : width;
 
-    // Slide offscreen
     track.style.transition = "transform 160ms ease-out";
     track.style.transform = `translateX(${off}px)`;
 
     window.setTimeout(() => {
-      // Save current day before leaving it
       autoSaveIfValid({ quiet: true });
-
       if (dir === "right") shiftDay(-1);
       else shiftDay(+1);
 
-      // Jump to opposite side, then animate back
       track.style.transition = "none";
       track.style.transform = `translateX(${-off}px)`;
 
@@ -334,7 +354,6 @@ function addSwipe() {
     }
 
     if (lockDir === "h") {
-      // Stop page scroll when user is swiping horizontally
       e.preventDefault();
       setTranslate(distX);
     }
@@ -346,55 +365,155 @@ function addSwipe() {
     const absY = Math.abs(distY);
 
     if (elapsedTime <= allowedTime && absX >= threshold && absY <= restraint) {
-      const dir = distX < 0 ? "left" : "right";
-      commitSwipe(dir);
+      commitSwipe(distX < 0 ? "left" : "right");
       return;
     }
 
     snapBack();
   }, { passive: true });
 
-  // If the touch is canceled, snap back
-  touchsurface.addEventListener("touchcancel", () => {
-    snapBack();
-  }, { passive: true });
+  touchsurface.addEventListener("touchcancel", snapBack, { passive: true });
 }
 
-/* ---------------- INIT ---------------- */
+function addRangeSwipe() {
+  const touchsurface = els.rangeSwipeStage;
+  const track = els.rangeSwipeTrack;
+
+  const threshold = 60;
+  const restraint = 90;
+  const allowedTime = 450;
+
+  let startX = 0;
+  let startY = 0;
+  let distX = 0;
+  let distY = 0;
+  let startTime = 0;
+  let locked = false;
+  let lockDir = null;
+
+  function setTranslate(px) {
+    track.style.transition = "none";
+    track.style.transform = `translateX(${px}px)`;
+  }
+
+  function snapBack() {
+    track.style.transition = "transform 160ms ease-out";
+    track.style.transform = "translateX(0px)";
+  }
+
+  function commitSwipe(dir) {
+    const width = touchsurface.clientWidth || 260;
+    const off = dir === "left" ? -width : width;
+
+    track.style.transition = "transform 140ms ease-out";
+    track.style.transform = `translateX(${off}px)`;
+
+    window.setTimeout(() => {
+      if (dir === "left") stepRange(+1);
+      else stepRange(-1);
+
+      track.style.transition = "none";
+      track.style.transform = `translateX(${-off}px)`;
+
+      window.setTimeout(() => {
+        track.style.transition = "transform 140ms ease-out";
+        track.style.transform = "translateX(0px)";
+      }, 16);
+    }, 145);
+  }
+
+  touchsurface.addEventListener("touchstart", (e) => {
+    if (!e.changedTouches || e.changedTouches.length !== 1) return;
+    const t = e.changedTouches[0];
+    startX = t.pageX;
+    startY = t.pageY;
+    distX = 0;
+    distY = 0;
+    startTime = Date.now();
+    locked = false;
+    lockDir = null;
+  }, { passive: true });
+
+  touchsurface.addEventListener("touchmove", (e) => {
+    if (!e.changedTouches || e.changedTouches.length !== 1) return;
+    const t = e.changedTouches[0];
+    distX = t.pageX - startX;
+    distY = t.pageY - startY;
+
+    if (!locked) {
+      if (Math.abs(distX) < 8 && Math.abs(distY) < 8) return;
+      locked = true;
+      lockDir = Math.abs(distX) > Math.abs(distY) ? "h" : "v";
+    }
+
+    if (lockDir === "h") {
+      e.preventDefault();
+      setTranslate(distX);
+    }
+  }, { passive: false });
+
+  touchsurface.addEventListener("touchend", () => {
+    const elapsedTime = Date.now() - startTime;
+    const absX = Math.abs(distX);
+    const absY = Math.abs(distY);
+
+    if (elapsedTime <= allowedTime && absX >= threshold && absY <= restraint) {
+      commitSwipe(distX < 0 ? "left" : "right");
+      return;
+    }
+
+    snapBack();
+  }, { passive: true });
+
+  touchsurface.addEventListener("touchcancel", snapBack, { passive: true });
+}
+
+function seedDummyDataIfEmpty() {
+  if (entries.length > 0) return;
+  const end = todayISODate();
+  const seeded = [];
+  const totalDays = 365;
+  const startWeight = 210;
+  const endWeight = 180;
+
+  for (let i = totalDays - 1; i >= 0; i--) {
+    const iso = shiftISO(end, -i);
+    const dayIndex = totalDays - 1 - i;
+    const progress = dayIndex / (totalDays - 1);
+    const trend = startWeight + (endWeight - startWeight) * progress;
+    const waveA = Math.sin(dayIndex / 11) * 1.6;
+    const waveB = Math.sin(dayIndex / 33) * 0.9;
+    const jitter = (Math.random() - 0.5) * 0.8;
+    const weight = Math.max(170, Math.min(214, trend + waveA + waveB + jitter));
+    seeded.push({ entryDate: iso, weight: Math.round(weight * 10) / 10, createdAt: Date.now() });
+  }
+
+  entries = seeded;
+  sortEntries();
+  saveEntries();
+}
 
 function init() {
   entries = loadEntries();
   sortEntries();
+  seedDummyDataIfEmpty();
 
   selectedISO = todayISODate();
-
-  // Optional seed data if empty (delete if you want blank start)
-  if (entries.length === 0) {
-    const t = selectedISO;
-    entries = [
-      { entryDate: shiftISO(t, -6), weight: 186.2, createdAt: Date.now() },
-      { entryDate: shiftISO(t, -4), weight: 185.3, createdAt: Date.now() },
-      { entryDate: shiftISO(t, -2), weight: 184.8, createdAt: Date.now() },
-      { entryDate: shiftISO(t,  0), weight: 184.3, createdAt: Date.now() },
-    ];
-    sortEntries();
-    saveEntries();
-  }
-
+  selectedRange = DEFAULT_RANGE;
   renderAll();
 
-  // Auto-save on leaving the field
-  els.weightInput.addEventListener("blur", () => {
-    autoSaveIfValid({ quiet: false });
-  });
-
-  // Enter saves (by forcing blur)
+  els.weightInput.addEventListener("blur", () => autoSaveIfValid({ quiet: false }));
   els.weightInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") els.weightInput.blur();
   });
 
-  // Swiping changes day; save occurs inside commitSwipe
   addSwipe();
+  addRangeSwipe();
+
+  els.chartCanvas.addEventListener("click", () => {
+    showGrid = !showGrid;
+    renderChart();
+  });
 }
 
 init();
