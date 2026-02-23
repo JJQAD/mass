@@ -5,10 +5,10 @@ const RANGES = ["7d", "1m", "6m", "1y"];
 const DEFAULT_RANGE = "7d";
 
 const RANGE_CONFIG = {
-  "7d": { days: 7, label: "week", tickEvery: 1 },
-  "1m": { days: 30, label: "month", tickEvery: 5 },
-  "6m": { days: 182, label: "6 months", tickEvery: 28 },
-  "1y": { days: 365, label: "year", tickEvery: 56 },
+  "7d": { days: 7, label: "week" },
+  "1m": { days: 30, label: "month" },
+  "6m": { days: 182, label: "6 months" },
+  "1y": { days: 365, label: "year" },
 };
 
 const els = {
@@ -150,8 +150,22 @@ function stepRange(delta) {
   return true;
 }
 
+function getLabelIndexes(totalPoints, labelCount = 7) {
+  if (totalPoints <= 1) return new Set([0]);
+
+  const maxLabels = Math.min(labelCount, totalPoints);
+  const indexes = new Set();
+
+  for (let i = 0; i < maxLabels; i++) {
+    const idx = Math.round((i * (totalPoints - 1)) / (maxLabels - 1));
+    indexes.add(idx);
+  }
+
+  return indexes;
+}
+
 function getSeries(endISO, rangeKey) {
-  const { days, tickEvery } = RANGE_CONFIG[rangeKey] || RANGE_CONFIG[DEFAULT_RANGE];
+  const { days } = RANGE_CONFIG[rangeKey] || RANGE_CONFIG[DEFAULT_RANGE];
   const dayList = [];
   for (let i = days - 1; i >= 0; i--) dayList.push(shiftISO(endISO, -i));
 
@@ -169,8 +183,9 @@ function getSeries(endISO, rangeKey) {
     }
   }
 
+  const labelIndexes = getLabelIndexes(dayList.length, 7);
   const labels = dayList.map((iso, idx) => {
-    if (idx !== 0 && idx !== dayList.length - 1 && idx % tickEvery !== 0) return "";
+    if (!labelIndexes.has(idx)) return "";
     const [, m, d] = iso.split("-");
     return `${Number(m)}/${Number(d)}`;
   });
@@ -409,7 +424,7 @@ function addRangeSwipe() {
     track.style.transform = `translateX(${off}px)`;
 
     window.setTimeout(() => {
-      if (dir === "left") stepRange(+1);
+      if (dir === "right") stepRange(+1);
       else stepRange(-1);
 
       track.style.transition = "none";
